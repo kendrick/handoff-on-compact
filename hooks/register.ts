@@ -82,19 +82,23 @@ export const register: Register = (on, options) => {
 					? "reply carries the skill's pointer block"
 					: undefined;
 		const dir = await handoffDir($);
+		// The skill's collision rule is -<SS>; the counter past it keeps any file from being overwritten.
+		const freePath = async (base: string) => {
+			let path = `${base}.md`;
+			for (let n = 1; await $.fs.exists(path); n++) {
+				path = `${base}-${pad(now.getSeconds())}${n === 1 ? '' : `-${n}`}.md`;
+			}
+			return path;
+		};
 		if (rejection !== undefined) {
 			// The fork was paid for, and its reply is the only evidence of why the contract broke. It goes in a
 			// subfolder: a bare `handoff` resumes the newest file in dir and would pick this one up.
-			const kept = `${dir}/rejected/${date}-${hhmm}.md`;
+			const kept = await freePath(`${dir}/rejected/${date}-${hhmm}`);
 			await $.fs.write(kept, reply.text);
 			$.ui.toast(`handoff-on-compact: ${rejection}, so core compacted · reply kept at ${kept}`);
 			return next(e);
 		}
-		const base = `${dir}/${date}-${hhmm}-${slug}`;
-		let path = `${base}.md`;
-		for (let n = 1; await $.fs.exists(path); n++) {
-			path = `${base}-${pad(now.getSeconds())}${n === 1 ? '' : `-${n}`}.md`;
-		}
+		const path = await freePath(`${dir}/${date}-${hhmm}-${slug}`);
 		await $.fs.write(path, reply.text);
 		const id = path.slice(lastSep(path) + 1, -'.md'.length);
 		$.ui.toast(`handoff-on-compact: saved ${path} · resume with \`handoff ${id}\``);

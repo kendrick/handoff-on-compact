@@ -318,3 +318,15 @@ test(
 		expect(seen.forks[0]?.startsWith('FORKED SKILL\n')).toBe(true);
 	},
 );
+
+test('a second rejected reply in the same minute gets its own file, so neither is lost', async ($, on) => {
+	const dir = '/tmp/x/agent-handoff/handoff-on-compact/rejected';
+	const seen = engine(on, {
+		reply: 'no heading here',
+		files: { [`${dir}/2026-11-06-1405.md`]: 'the first' },
+	});
+
+	await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(Object.keys(seen.writes)).toEqual([`${dir}/2026-11-06-1405-37.md`]);
+});
