@@ -38,6 +38,8 @@ Text after `/compact` goes to the fork as a focus line, so `/compact keep the AP
 
 If the plugin can't produce a document, Claude Code's own compaction runs instead, and a toast says why: the skill wasn't found, the fork failed, the reply broke the skill's contract, or the plugin hit an error. A reply that broke the contract is kept in `rejected/` inside the handoff folder, so you can see what the fork wrote.
 
+To see what the next compaction would swap in, run `/handoff-preview`. It forks the same way the compaction does and shows the document with the path it would be saved to, or the rejected reply with the reason. It never compacts or writes a file. Text after `/handoff-preview` works like text after `/compact`.
+
 To skip the plugin for one compaction on purpose, run `/compact native`. Any text after `native` goes to Claude Code's compaction as usual. The plugin leaves compactions inside subagents alone.
 
 ## Configuration
