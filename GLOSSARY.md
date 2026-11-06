@@ -17,5 +17,9 @@ Claude Code's own compaction, run when the plugin can't produce a handoff docume
 _Avoid_: classic compaction, native mode
 
 **Escape hatch**:
-A one-shot request that sends the next compaction to the fallback on purpose.
+A compaction the user sends to the fallback on purpose.
 _Avoid_: classic, bypass
+
+**Rejected reply**:
+A fork's reply that breaks the skill's contract, so the plugin keeps it for inspection and falls back instead of swapping it in.
+_Avoid_: failed handoff, bad document
