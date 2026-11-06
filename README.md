@@ -2,8 +2,6 @@
 
 A Claude Code plugin that turns compaction into a handoff. When the conversation compacts, a fork of the session writes a handoff document from the [`handoff` skill](https://github.com/kendrick/skills/tree/main/handoff)'s own template. The plugin saves that document where the skill keeps its handoffs and replaces the conversation with it. You get the same result as running `handoff`, then `/clear`, then resuming, without leaving the session.
 
-> **Status:** not ready to install. The plugin depends on [kendrick/skills#302](https://github.com/kendrick/skills/issues/302), which adds the `inline` destination it asks the skill for. Until that lands, expect every compaction to fall back: the skill ends its reply with its file pointer, and the plugin rejects a reply that carries one.
-
 ## Why
 
 Claude Code's built-in compaction writes a free-form summary, and the next turn has to work out what's still open. The `handoff` skill already writes a document that answers that question: unfinished tasks, decisions, gotchas, and how to verify. This plugin runs the skill whenever the conversation compacts, so you don't have to remember to run it yourself.
@@ -24,7 +22,7 @@ From a shell:
 claude plugin install handoff-on-compact --marketplace kendrick/handoff-on-compact
 ```
 
-The plugin needs the `handoff` skill installed. Without it, compaction falls back to Claude Code's own summarizer.
+The plugin needs the `handoff` skill installed, in a version with the `inline` destination from [kendrick/skills#302](https://github.com/kendrick/skills/issues/302). Without the skill, compaction falls back to Claude Code's own summarizer.
 
 ## How It Works
 
