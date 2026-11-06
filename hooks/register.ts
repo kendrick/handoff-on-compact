@@ -29,7 +29,9 @@ const handoffDir = async ($: EngineInterface) => {
 	return `${tmp.replace(/[/\\]+$/, '')}/agent-handoff/${project}`;
 };
 
-export const register: Register = (on) => {
+export const register: Register = (on, options) => {
+	const skillOption = typeof options.skill_path === 'string' ? options.skill_path : '';
+
 	// A precompute result is kept for a compaction that may never come, so a fork there is spend
 	// with no payoff, and its document would be stale by the time it's used.
 	on('session.compact', { trigger: 'precompute' }, () => ({
@@ -47,7 +49,11 @@ export const register: Register = (on) => {
 		}
 
 		const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'));
-		const skillPath = `${home}/.claude/skills/handoff/SKILL.md`;
+		// $.fs doesn't expand ~, and a settings field is where people will type one.
+		const skillPath =
+			skillOption === ''
+				? `${home}/.claude/skills/handoff/SKILL.md`
+				: skillOption.replace(/^~(?=[/\\])/, `${home}`);
 		if (!(await $.fs.exists(skillPath))) {
 			$.ui.toast(`handoff-on-compact: no handoff skill at ${skillPath}, so core compacted`);
 			return next(e);

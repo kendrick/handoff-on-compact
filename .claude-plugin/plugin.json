@@ -2,7 +2,17 @@
 	"name": "handoff-on-compact",
 	"version": "0.1.0",
 	"description": "Turns compaction into a structured handoff written by the handoff skill.",
-	"author": { "name": "Kendrick Arnett" },
+	"author": {
+		"name": "Kendrick Arnett"
+	},
 	"repository": "https://github.com/kendrick/handoff-on-compact",
-	"license": "MIT"
+	"license": "MIT",
+	"userConfig": {
+		"skill_path": {
+			"type": "string",
+			"title": "Skill path",
+			"description": "Where to read the handoff skill's SKILL.md. A leading ~ is your home folder. Empty: ~/.claude/skills/handoff/SKILL.md.",
+			"default": ""
+		}
+	}
 }

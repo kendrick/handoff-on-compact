@@ -44,7 +44,7 @@ To skip the plugin for one compaction on purpose, run `/compact native`. Any tex
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `skill_path` | `$HOME/.claude/skills/handoff/SKILL.md` | Where the plugin reads the `handoff` skill from. |
+| `skill_path` | empty, which reads `~/.claude/skills/handoff/SKILL.md` | Where the plugin reads the `handoff` skill's `SKILL.md`. A leading `~` is your home folder. |
 
 ## Develop
 

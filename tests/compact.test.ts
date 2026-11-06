@@ -306,3 +306,15 @@ test('an error anywhere in the hook falls back to core with a toast, never silen
 	expect(seen.toasts).toHaveLength(1);
 	expect(seen.toasts[0]).toMatch(/^handoff-on-compact: .*EACCES.*, so core compacted$/);
 });
+
+test(
+	'skill_path points the plugin at another SKILL.md, with a leading ~ read as the home folder',
+	{ options: { skill_path: '~/forks/handoff/SKILL.md' } },
+	async ($, on) => {
+		const seen = engine(on, { files: { '/home/k/forks/handoff/SKILL.md': 'FORKED SKILL' } });
+
+		await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+		expect(seen.forks[0]?.startsWith('FORKED SKILL\n')).toBe(true);
+	},
+);
