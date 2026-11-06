@@ -1,0 +1,3 @@
+# The Skill Owns the Handoff Document
+
+The plugin carries no copy of the handoff document's outline. On each compaction, it reads the installed `handoff` skill's `SKILL.md` and asks a fork to follow it with `handoff inline`. It then takes the filename from the document's own `# Handoff:` heading and timestamp line. We chose this over a bundled template so that the manual handoff and the automatic one can never drift apart. The cost is that a change to the skill changes this plugin's output with no release here. A test that every reply opens with `# Handoff:` catches a skill change that breaks the contract. The plugin repeats only the skill's folder rules, because a fork can't write files.

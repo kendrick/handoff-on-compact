@@ -1,0 +1,14 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig",
+	// The engine writes .claude-plugin/types/ when it loads this plugin: the mod API's
+	// types and the strict baseline. Hooks run with no Node, so there's no @types/node.
+	"extends": "./.claude-plugin/types/tsconfig.json",
+	"compilerOptions": {
+		"exactOptionalPropertyTypes": true,
+		"noImplicitReturns": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"verbatimModuleSyntax": true
+	},
+	"include": ["hooks", "tests"]
+}

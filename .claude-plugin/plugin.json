@@ -1,0 +1,8 @@
+{
+	"name": "handoff-on-compact",
+	"version": "0.1.0",
+	"description": "Turns compaction into a structured handoff written by the handoff skill.",
+	"author": { "name": "Kendrick Arnett" },
+	"repository": "https://github.com/kendrick/handoff-on-compact",
+	"license": "MIT"
+}

@@ -1,0 +1,16 @@
+{
+	"name": "handoff-on-compact",
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc",
+		"lint": "oxlint && oxfmt --check",
+		"format": "oxfmt"
+	},
+	"devDependencies": {
+		"oxfmt": "0.75.0",
+		"oxlint": "1.90.0",
+		"oxlint-tsgolint": "7.0.2005",
+		"typescript": "7.0.2"
+	}
+}
