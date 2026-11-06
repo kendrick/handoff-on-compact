@@ -114,16 +114,16 @@ export const register: Register = (on, options) => {
 		const result = await attempt($, skillOption, e.args.trim() || undefined);
 		switch (result.outcome) {
 			case 'no-skill':
-				return { text: `handoff-on-compact: no handoff skill at ${result.skillPath}` };
+				return { text: `No handoff skill at ${result.skillPath}` };
 			case 'fork-failed':
-				return { text: `handoff-on-compact: fork failed (${result.reason})` };
+				return { text: `Fork failed (${result.reason})` };
 			case 'rejected':
 				return {
-					text: `handoff-on-compact would reject this reply: ${result.reason}\n\n${result.text}`,
+					text: `Would reject this reply: ${result.reason}\n\n${result.text}`,
 				};
 		}
 		return {
-			text: `handoff-on-compact would save this to ${result.path} and swap it in:\n\n${result.text}`,
+			text: `Would save this to ${result.path} and swap it in:\n\n${result.text}`,
 		};
 	});
 

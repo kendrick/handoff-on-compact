@@ -95,3 +95,11 @@ test('text after the command reaches the fork as the focus line, as /compact tex
 
 	expect(seen.forks[0]?.split('\n')).toContain('Focus: keep the API notes');
 });
+
+test("the preview's text skips the plugin name, which the engine already puts in front of it", async ($, on) => {
+	engine(on);
+
+	const { text } = await preview($, '');
+
+	expect(text?.startsWith('Would save this to /tmp/x/agent-handoff/')).toBe(true);
+});
