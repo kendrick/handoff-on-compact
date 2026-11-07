@@ -30,7 +30,7 @@ On a compaction of the main conversation, the plugin:
 
 1. Reads the installed `handoff` skill's `SKILL.md` and asks a fork of the session to write a handoff document from it.
 2. Saves the document to `$TMPDIR/agent-handoff/<project>/<YYYY-MM-DD-HHMM>-<slug>.md`, the same name and folder the skill uses. A toast names the file, and `handoff <id>` can resume it from any later session.
-3. Replaces the conversation with that one document, and the model carries on from it.
+3. Replaces the conversation with that one document. The model waits for your next message and continues from the document, and the toast tells you to send one.
 
 Text after `/compact` goes to the fork as a focus line, so `/compact keep the API notes` still gets a full handoff document that leans toward the API notes.
 

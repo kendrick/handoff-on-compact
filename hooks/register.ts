@@ -162,7 +162,10 @@ export const register: Register = (on, options) => {
 		}
 		await $.fs.write(result.path, result.text);
 		const id = result.path.slice(lastSep(result.path) + 1, -'.md'.length);
-		$.ui.toast(`handoff-on-compact: saved ${result.path} · resume with \`handoff ${id}\``);
+		// The swap sends no prompt to the model, so the session sits idle until the user speaks, and the toast has to say that.
+		$.ui.toast(
+			`handoff-on-compact: swapped in the handoff · send any message to continue from it · saved ${result.path} for \`handoff ${id}\``,
+		);
 		return { messages: [{ role: 'user', text: result.text, toolUses: [] }] };
 	}).catch(($, e, next) => {
 		$.ui.toast(`handoff-on-compact: ${next.error.message ?? next.error.kind}, so core compacted`);

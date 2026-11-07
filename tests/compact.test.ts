@@ -279,7 +279,7 @@ test('a swap toasts where the document went and how to resume it, since the swap
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(seen.toasts).toEqual([
-		'handoff-on-compact: saved /tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md · resume with `handoff 2026-11-06-1405-probe-fork`',
+		'handoff-on-compact: swapped in the handoff · send any message to continue from it · saved /tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md for `handoff 2026-11-06-1405-probe-fork`',
 	]);
 });
 
