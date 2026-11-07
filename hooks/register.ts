@@ -96,6 +96,7 @@ const attempt = async (
 	};
 };
 
+// Toasts and command text carry no plugin name: Claude Code draws both under it already.
 export const register: Register = (on, options) => {
 	const skillOption = typeof options.skill_path === 'string' ? options.skill_path : '';
 
@@ -146,29 +147,29 @@ export const register: Register = (on, options) => {
 		const result = await attempt($, skillOption, e.instructions);
 		switch (result.outcome) {
 			case 'no-skill':
-				$.ui.toast(
-					`handoff-on-compact: no handoff skill at ${result.skillPath}, so core compacted`,
-				);
+				$.ui.toast(`No handoff skill at ${result.skillPath}, so core compacted`);
 				return next(e);
 			case 'fork-failed':
-				$.ui.toast(`handoff-on-compact: fork failed (${result.reason}), so core compacted`);
+				$.ui.toast(`Fork failed (${result.reason}), so core compacted`);
 				return next(e);
 			case 'rejected':
 				await $.fs.write(result.path, result.text);
 				$.ui.toast(
-					`handoff-on-compact: ${result.reason}, so core compacted · reply kept at ${result.path}`,
+					`${result.reason.charAt(0).toUpperCase()}${result.reason.slice(1)}, so core compacted · reply kept at ${result.path}`,
 				);
 				return next(e);
 		}
 		await $.fs.write(result.path, result.text);
 		const id = result.path.slice(lastSep(result.path) + 1, -'.md'.length);
 		// The swap sends no prompt to the model, so the session sits idle until the user speaks, and the toast has to say that.
+		// It carries the path and id to resume from, more than the default 4 s lets anyone read.
 		$.ui.toast(
-			`handoff-on-compact: swapped in the handoff · send any message to continue from it · saved ${result.path} for \`handoff ${id}\``,
+			`Swapped in the handoff · send any message to continue from it · saved ${result.path} for \`handoff ${id}\``,
+			{ timeoutMs: 15_000 },
 		);
 		return { messages: [{ role: 'user', text: result.text, toolUses: [] }] };
 	}).catch(($, e, next) => {
-		$.ui.toast(`handoff-on-compact: ${next.error.message ?? next.error.kind}, so core compacted`);
+		$.ui.toast(`${next.error.message ?? next.error.kind}, so core compacted`);
 		return next(e);
 	});
 };

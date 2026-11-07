@@ -4,10 +4,10 @@ When Claude Code compacts your conversation, get a handoff document instead of a
 
 A handoff document is a short Markdown file that the [`handoff` skill](https://github.com/kendrick/skills/tree/main/handoff) writes for the next session to pick up from. It lists the unfinished tasks, the goal, what's done, the exact next step, the files that matter, decisions and gotchas, and how to verify the work. At every compaction, this plugin has a fork of your session write one, saves it, and replaces the conversation with it. You get the same result as running `handoff`, then `/clear`, then resuming, without leaving the session.
 
-Here's what a compaction looks like, from a real session. First the toast:
+Here's what a compaction looks like, from a real session. First the toast, which Claude Code shows under the plugin's name:
 
 ```text
-handoff-on-compact: swapped in the handoff · send any message to continue from it · saved $TMPDIR/agent-handoff/skills/2026-11-06-1743-issue-303-awaiting-go.md for `handoff 2026-11-06-1743-issue-303-awaiting-go`
+Swapped in the handoff · send any message to continue from it · saved $TMPDIR/agent-handoff/skills/2026-11-06-1743-issue-303-awaiting-go.md for `handoff 2026-11-06-1743-issue-303-awaiting-go`
 ```
 
 Then the start of the document, which is now the whole conversation:

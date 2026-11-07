@@ -46,6 +46,7 @@ const engine = (
 		forks: [] as string[],
 		writes: {} as Record<string, string>,
 		toasts: [] as string[],
+		toastTimeouts: [] as (number | undefined)[],
 		core: [] as (string | undefined)[],
 	};
 	const disk: Record<string, string> = {
@@ -78,6 +79,7 @@ const engine = (
 	});
 	on('ui.toast', (_, e) => {
 		seen.toasts.push(e.text);
+		seen.toastTimeouts.push(e.timeoutMs);
 		return { value: undefined };
 	});
 	on('model.fork', (_, e) => {
@@ -134,7 +136,7 @@ test('a reply without the heading falls back to core, and is kept beside the han
 	expect(result).toEqual(CORE);
 	expect(seen.writes).toEqual({ [kept]: reply });
 	expect(seen.toasts).toEqual([
-		`handoff-on-compact: no \`# Handoff:\` heading, so core compacted · reply kept at ${kept}`,
+		`No \`# Handoff:\` heading, so core compacted · reply kept at ${kept}`,
 	]);
 });
 
@@ -146,7 +148,7 @@ test('a missing skill falls back to core before any fork, with a toast saying wh
 	expect(result).toEqual(CORE);
 	expect(seen.forks).toEqual([]);
 	expect(seen.toasts).toEqual([
-		'handoff-on-compact: no handoff skill at /nobody/.claude/skills/handoff/SKILL.md, so core compacted',
+		'No handoff skill at /nobody/.claude/skills/handoff/SKILL.md, so core compacted',
 	]);
 });
 
@@ -156,9 +158,7 @@ test('a fork that fails falls back to core, with a toast naming the reason', asy
 	const result = await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(result).toEqual(CORE);
-	expect(seen.toasts).toEqual([
-		'handoff-on-compact: fork failed (nothing-to-fork), so core compacted',
-	]);
+	expect(seen.toasts).toEqual(['Fork failed (nothing-to-fork), so core compacted']);
 });
 
 test('a taken filename gets the seconds appended, as the handoff skill does, so no handoff is overwritten', async ($, on) => {
@@ -279,7 +279,7 @@ test('a swap toasts where the document went and how to resume it, since the swap
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(seen.toasts).toEqual([
-		'handoff-on-compact: swapped in the handoff · send any message to continue from it · saved /tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md for `handoff 2026-11-06-1405-probe-fork`',
+		'Swapped in the handoff · send any message to continue from it · saved /tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md for `handoff 2026-11-06-1405-probe-fork`',
 	]);
 });
 
@@ -293,7 +293,7 @@ test("a document that still carries the skill's pointer block is rejected, not s
 	expect(result).toEqual(CORE);
 	expect(seen.writes).toEqual({ [kept]: reply });
 	expect(seen.toasts).toEqual([
-		`handoff-on-compact: reply carries the skill's pointer block, so core compacted · reply kept at ${kept}`,
+		`Reply carries the skill's pointer block, so core compacted · reply kept at ${kept}`,
 	]);
 });
 
@@ -304,7 +304,7 @@ test('an error anywhere in the hook falls back to core with a toast, never silen
 
 	expect(result).toEqual(CORE);
 	expect(seen.toasts).toHaveLength(1);
-	expect(seen.toasts[0]).toMatch(/^handoff-on-compact: .*EACCES.*, so core compacted$/);
+	expect(seen.toasts[0]).toMatch(/^[^h].*EACCES.*, so core compacted$/);
 });
 
 test(
@@ -329,4 +329,12 @@ test('a second rejected reply in the same minute gets its own file, so neither i
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(Object.keys(seen.writes)).toEqual([`${dir}/2026-11-06-1405-37.md`]);
+});
+
+test('the swap toast stays long enough to read its path and id, since the default 4 s does not', async ($, on) => {
+	const seen = engine(on);
+
+	await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(seen.toastTimeouts[0]).toBeGreaterThanOrEqual(15_000);
 });
