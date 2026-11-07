@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code';
+import type { EngineInterface, Register, SessionMessage } from 'claude-code';
 
 // The skill's own contract (ADR 0002): the reply opens with this heading, and the filename's slug comes from it.
 const HEADING = /^# Handoff: ([a-z0-9-]+)\n/;
@@ -96,6 +96,25 @@ const attempt = async (
 	};
 };
 
+// Past this many characters, the swap would leave the context nearly as full as before (about 15k tokens).
+const TAIL_CAP = 60_000;
+
+// shortcut: JSON length overcounts a little against the text a request carries; fine for a cap.
+const size = (messages: readonly SessionMessage[]) => JSON.stringify(messages).length;
+
+const AFTER =
+	'The conversation continued after this handoff was written. The messages that follow are newer than it.';
+
+// The swap sends no prompt to the model, so the session sits idle until the user speaks, and the toast has to say that.
+// It carries the path and id to resume from, more than the default 4 s lets anyone read.
+const toastSwap = ($: EngineInterface, path: string) => {
+	const id = path.slice(lastSep(path) + 1, -'.md'.length);
+	$.ui.toast(
+		`Swapped in the handoff · send any message to continue from it · saved ${path} for \`handoff ${id}\``,
+		{ timeoutMs: 15_000 },
+	);
+};
+
 // Toasts and command text carry no plugin name: Claude Code draws both under it already.
 export const register: Register = (on, options) => {
 	const skillOption = typeof options.skill_path === 'string' ? options.skill_path : '';
@@ -128,11 +147,24 @@ export const register: Register = (on, options) => {
 		};
 	});
 
-	// A precompute result is kept for a compaction that may never come, so a fork there is spend
-	// with no payoff, and its document would be stale by the time it's used.
-	on('session.compact', { trigger: 'precompute' }, () => ({
-		skip: 'handoff-on-compact writes at compaction time',
-	}));
+	// The fork written ahead of time, and the last message it read. A module variable: a reload drops it,
+	// and the compaction then forks fresh, which is the fallback anyway.
+	let ahead: { pending: Promise<Attempt>; coveredHandle: string | undefined } | undefined;
+
+	// Fork on the engine's precompute so the real compaction swaps instantly, then answer skip so the
+	// engine keeps nothing of its own and the real compaction still comes back through this hook.
+	on('session.compact', { trigger: 'precompute' }, async ($, e) => {
+		if (e.agentId === undefined) {
+			// Nobody asked for a precompute, so its failures stay quiet and the compaction forks fresh.
+			const pending = attempt($, skillOption).catch((): Attempt => ({
+				outcome: 'fork-failed',
+				reason: 'precompute threw',
+			}));
+			ahead = { pending, coveredHandle: e.messages.at(-1)?.handle };
+			await pending;
+		}
+		return { skip: 'handoff-on-compact writes its own handoff ahead of time' };
+	});
 
 	on('session.compact', async ($, e, next) => {
 		if (e.agentId !== undefined) return next(e);
@@ -142,6 +174,25 @@ export const register: Register = (on, options) => {
 		if (native) {
 			const { instructions: _, ...rest } = e;
 			return next(native[1] ? { ...rest, instructions: native[1] } : rest);
+		}
+
+		const cached = ahead;
+		ahead = undefined;
+		// The stored document was written without focus text, so a focused /compact needs its own fork.
+		if (cached !== undefined && e.instructions === undefined) {
+			const early = await cached.pending;
+			const { coveredHandle } = cached;
+			const at =
+				coveredHandle === undefined ? -1 : e.messages.findIndex((m) => m.handle === coveredHandle);
+			// Messages after the precompute ride along verbatim, so nothing said since is summarized away.
+			const tail = at === -1 ? undefined : e.messages.slice(at + 1);
+			if (early.outcome === 'accepted' && tail !== undefined && size(tail) <= TAIL_CAP) {
+				await $.fs.write(early.path, early.text);
+				toastSwap($, early.path);
+				return {
+					messages: [{ role: 'user', text: `${early.text}\n\n${AFTER}`, toolUses: [] }, ...tail],
+				};
+			}
 		}
 
 		const result = await attempt($, skillOption, e.instructions);
@@ -160,13 +211,7 @@ export const register: Register = (on, options) => {
 				return next(e);
 		}
 		await $.fs.write(result.path, result.text);
-		const id = result.path.slice(lastSep(result.path) + 1, -'.md'.length);
-		// The swap sends no prompt to the model, so the session sits idle until the user speaks, and the toast has to say that.
-		// It carries the path and id to resume from, more than the default 4 s lets anyone read.
-		$.ui.toast(
-			`Swapped in the handoff · send any message to continue from it · saved ${result.path} for \`handoff ${id}\``,
-			{ timeoutMs: 15_000 },
-		);
+		toastSwap($, result.path);
 		return { messages: [{ role: 'user', text: result.text, toolUses: [] }] };
 	}).catch(($, e, next) => {
 		$.ui.toast(`${next.error.message ?? next.error.kind}, so core compacted`);

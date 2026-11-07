@@ -24,6 +24,10 @@ type Engine = {
 	reply?: string;
 	failure?: 'nothing-to-fork' | 'empty-reply' | 'aborted';
 	writeFails?: boolean;
+	// Holds every fork until it resolves, to stand for one still running.
+	gate?: Promise<void>;
+	// The first fork is refused outright, as an engine error would be.
+	firstForkThrows?: boolean;
 };
 
 // The test host is POSIX, so the engine resolves a drive path against the working directory; undo that.
@@ -40,6 +44,8 @@ const engine = (
 		reply = DOC,
 		failure,
 		writeFails = false,
+		gate,
+		firstForkThrows = false,
 	}: Engine = {},
 ) => {
 	const seen = {
@@ -82,8 +88,10 @@ const engine = (
 		seen.toastTimeouts.push(e.timeoutMs);
 		return { value: undefined };
 	});
-	on('model.fork', (_, e) => {
+	on('model.fork', async (_, e) => {
 		seen.forks.push(e.prompt);
+		await gate;
+		if (firstForkThrows && seen.forks.length === 1) return { deny: 'engine error' };
 		if (failure) return { value: { isAnswered: false as const, reason: failure, usage: USAGE } };
 		return { value: { isAnswered: true as const, text: reply, usage: USAGE } };
 	});
@@ -91,7 +99,7 @@ const engine = (
 	return seen;
 };
 
-test('a precompute is skipped, so no fork runs ahead of a compaction that may never come', async ($, on) => {
+test('a precompute answers skip, so the engine keeps nothing and the real compaction still reaches the hook', async ($, on) => {
 	engine(on);
 
 	const result = await $.session.compact({ trigger: 'precompute', messages: CHAT });
@@ -337,4 +345,133 @@ test('the swap toast stays long enough to read its path and id, since the defaul
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(seen.toastTimeouts[0]).toBeGreaterThanOrEqual(15_000);
+});
+
+// Promise.withResolvers runs here, but the engine's TS lib predates its typings.
+const deferred = () => {
+	let resolve: (() => void) | undefined;
+	const promise = new Promise<void>((done) => (resolve = done));
+	return { promise, resolve: () => resolve?.() };
+};
+
+const said = (
+	text: string,
+	handle: string,
+	role: 'user' | 'assistant' = 'user',
+): SessionMessage => ({
+	role,
+	text,
+	toolUses: [],
+	handle,
+});
+
+test('a precomputed handoff swaps in with no second fork, and everything said after it follows verbatim', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1'), said('on it', 'h2', 'assistant')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	const after = [...before, said('one more thing', 'h3'), said('done', 'h4', 'assistant')];
+	const result = await $.session.compact({ trigger: 'manual', messages: after });
+
+	expect(seen.forks).toHaveLength(1);
+	expect(result.messages?.[0]?.text.startsWith(DOC)).toBe(true);
+	expect(result.messages?.slice(1).map((m) => [m.text, m.handle])).toEqual([
+		['one more thing', 'h3'],
+		['done', 'h4'],
+	]);
+});
+
+test('a tail over the cap forks fresh, since swapping it in would leave the context nearly as full', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	const huge = said('x'.repeat(60_001), 'h2', 'assistant');
+	const result = await $.session.compact({ trigger: 'manual', messages: [...before, huge] });
+
+	expect(seen.forks).toHaveLength(2);
+	expect(result.messages?.map((m) => m.text)).toEqual([DOC]);
+});
+
+test('/compact with focus text forks fresh, since the precomputed document was written without it', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	await $.session.compact({
+		trigger: 'manual',
+		instructions: 'keep the API notes',
+		messages: before,
+	});
+
+	expect(seen.forks).toHaveLength(2);
+	expect(seen.forks[1]?.split('\n')).toContain('Focus: keep the API notes');
+});
+
+test('a precompute whose last message is gone (a /clear or a rewind) forks fresh', async ($, on) => {
+	const seen = engine(on);
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	await $.session.compact({ trigger: 'manual', messages: [said('a new start', 'h9')] });
+
+	expect(seen.forks).toHaveLength(2);
+});
+
+test('a failed precompute stays quiet, and the compaction forks fresh', async ($, on) => {
+	const seen = engine(on, { reply: 'no heading here' });
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	expect(seen.toasts).toEqual([]);
+	expect(seen.writes).toEqual({});
+
+	await $.session.compact({ trigger: 'manual', messages: [said('hi', 'h1')] });
+
+	expect(seen.forks).toHaveLength(2);
+});
+
+test('a compaction that arrives while the precompute is still forking waits for it, so only one fork runs', async ($, on) => {
+	const gate = deferred();
+	const seen = engine(on, { gate: gate.promise });
+	const before = [said('hi', 'h1')];
+
+	const early = $.session.compact({ trigger: 'precompute', messages: before });
+	const compaction = $.session.compact({ trigger: 'manual', messages: before });
+	gate.resolve();
+	await early;
+	const result = await compaction;
+
+	expect(seen.forks).toHaveLength(1);
+	expect(result.messages?.[0]?.text.startsWith(DOC)).toBe(true);
+});
+
+test('a precomputed document is used once, so the next compaction forks fresh', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+	await $.session.compact({ trigger: 'manual', messages: before });
+
+	await $.session.compact({ trigger: 'manual', messages: before });
+
+	expect(seen.forks).toHaveLength(2);
+});
+
+test('a precompute that throws stays quiet, and the compaction forks fresh with no error toast', async ($, on) => {
+	const seen = engine(on, { firstForkThrows: true });
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	const result = await $.session.compact({ trigger: 'manual', messages: before });
+
+	expect(seen.forks).toHaveLength(2);
+	expect(result.messages?.map((m) => m.text)).toEqual([DOC]);
+	expect(seen.toasts.filter((t) => t.includes('core compacted'))).toEqual([]);
+});
+
+test('a precompute over messages with no handle is never matched, so the compaction forks fresh', async ($, on) => {
+	const seen = engine(on);
+	await $.session.compact({ trigger: 'precompute', messages: CHAT });
+
+	await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(seen.forks).toHaveLength(2);
 });
