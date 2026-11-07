@@ -1,7 +1,7 @@
 {
 	"name": "handoff-on-compact",
 	"version": "0.1.0",
-	"description": "Turns compaction into a structured handoff written by the handoff skill.",
+	"description": "Turns Claude Code compaction into a resumable handoff document",
 	"author": {
 		"name": "Kendrick Arnett"
 	},
