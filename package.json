@@ -1,6 +1,18 @@
 {
 	"name": "handoff-on-compact",
 	"version": "0.1.0",
+	"description": "Turns Claude Code compaction into a resumable handoff document",
+	"keywords": [
+		"agent-skills",
+		"claude-code",
+		"claude-code-plugin",
+		"compaction",
+		"context-management",
+		"handoff"
+	],
+	"license": "MIT",
+	"author": "Kendrick Arnett",
+	"repository": "github:kendrick/handoff-on-compact",
 	"type": "module",
 	"scripts": {
 		"typecheck": "tsc",
