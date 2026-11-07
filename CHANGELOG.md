@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.1 (2026-11-07)
+
+### Bug Fixes
+
+- drop the plugin name from toasts and keep the swap toast up longer
+
+### Documentation
+
+- rewrite the README for Claude Code users new to the handoff skill
+
 ## v0.1.0 (2026-11-07)
 
 ### Bug Fixes
