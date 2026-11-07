@@ -1,44 +1,71 @@
 # handoff-on-compact
 
-A Claude Code plugin that turns compaction into a handoff. When the conversation compacts, a fork of the session writes a handoff document from the [`handoff` skill](https://github.com/kendrick/skills/tree/main/handoff)'s own template. The plugin saves that document where the skill keeps its handoffs and replaces the conversation with it. You get the same result as running `handoff`, then `/clear`, then resuming, without leaving the session.
+When Claude Code compacts your conversation, get a handoff document instead of a summary.
+
+A handoff document is a short Markdown file that the [`handoff` skill](https://github.com/kendrick/skills/tree/main/handoff) writes for the next session to pick up from. It lists the unfinished tasks, the goal, what's done, the exact next step, the files that matter, decisions and gotchas, and how to verify the work. At every compaction, this plugin has a fork of your session write one, saves it, and replaces the conversation with it. You get the same result as running `handoff`, then `/clear`, then resuming, without leaving the session.
+
+Here's what a compaction looks like, from a real session. First the toast:
+
+```text
+handoff-on-compact: swapped in the handoff · send any message to continue from it · saved $TMPDIR/agent-handoff/skills/2026-11-06-1743-issue-303-awaiting-go.md for `handoff 2026-11-06-1743-issue-303-awaiting-go`
+```
+
+Then the start of the document, which is now the whole conversation:
+
+```markdown
+# Handoff: issue-303-awaiting-go
+
+2026-11-06 17:43 CST · skills / main at 943f24d · Agent: Claude Code (Opus 5.5)
+
+## Unfinished Tasks
+
+1. [in_progress] Run work-issue on #303 — …
+
+## Goal
+
+Ship the handoff-skill issues (#302 done, #303 next), then return to the resume-model epic (#145) with #189 and #149.
+```
 
 ## Why
 
-Claude Code's built-in compaction writes a free-form summary, and the next turn has to work out what's still open. The `handoff` skill already writes a document that answers that question: unfinished tasks, decisions, gotchas, and how to verify. This plugin runs the skill whenever the conversation compacts, so you don't have to remember to run it yourself.
-
-The skill stays the manual path and works across agents and operating systems. This plugin is the automatic path and runs only in Claude Code. The plugin carries no copy of the template, so when the skill's template changes, so does the plugin's output.
+Claude Code's own compaction writes a free-form summary, and the next turn has to work out what's still open. A handoff document's sections answer that, and the skill that writes it is the same one you'd run by hand. The plugin carries no copy of the skill's template, so when the template changes, the plugin's output changes with it.
 
 ## Install
 
-At the prompt of a terminal session:
+Install the `handoff` skill first. The plugin needs a version with the `inline` destination from [kendrick/skills#302](https://github.com/kendrick/skills/issues/302):
+
+```sh
+npx skills add kendrick/skills --skill handoff
+```
+
+Then install the plugin from the prompt of a Claude Code session:
 
 ```text
 /plugin install handoff-on-compact --marketplace kendrick/handoff-on-compact
 ```
 
-From a shell:
+Or from a shell:
 
 ```sh
 claude plugin install handoff-on-compact --marketplace kendrick/handoff-on-compact
 ```
 
-The plugin needs the `handoff` skill installed, in a version with the `inline` destination from [kendrick/skills#302](https://github.com/kendrick/skills/issues/302). Without the skill, compaction falls back to Claude Code's own summarizer.
+## Usage
 
-## How It Works
+Compact the way you already do: both `/compact` and Claude Code's automatic compaction go through the plugin. After the swap, the session waits for you. Send any message, and the model continues from the document. To pick the same document up in a later session, run `handoff <id>` with the id from the toast.
 
-On a compaction of the main conversation, the plugin:
+| You type | What happens |
+| --- | --- |
+| `/compact` | A handoff document for the whole session replaces the conversation. |
+| `/compact keep the API notes` | The same, with your text passed to the fork as a focus line. |
+| `/handoff-preview` | Shows the document the next compaction would swap in, and the path it would be saved to. It never compacts or writes a file. Text after it works like text after `/compact`. |
+| `/compact native` | Skips the plugin for this one compaction. Any text after `native` goes to Claude Code's compaction as usual. |
 
-1. Reads the installed `handoff` skill's `SKILL.md` and asks a fork of the session to write a handoff document from it.
-2. Saves the document to `$TMPDIR/agent-handoff/<project>/<YYYY-MM-DD-HHMM>-<slug>.md`, the same name and folder the skill uses. A toast names the file, and `handoff <id>` can resume it from any later session.
-3. Replaces the conversation with that one document. The model waits for your next message and continues from the document, and the toast tells you to send one.
+The plugin saves each document to `$TMPDIR/agent-handoff/<project>/<YYYY-MM-DD-HHMM>-<slug>.md`, the folder and name the skill uses. `<project>` is the name of your repo's root folder. Compactions inside subagents go to Claude Code's own compaction untouched.
 
-Text after `/compact` goes to the fork as a focus line, so `/compact keep the API notes` still gets a full handoff document that leans toward the API notes.
+### When It Falls Back
 
 If the plugin can't produce a document, Claude Code's own compaction runs instead, and a toast says why: the skill wasn't found, the fork failed, the reply broke the skill's contract, or the plugin hit an error. A reply that broke the contract is kept in `rejected/` inside the handoff folder, so you can see what the fork wrote.
-
-To see what the next compaction would swap in, run `/handoff-preview`. It forks the same way the compaction does and shows the document with the path it would be saved to, or the rejected reply with the reason. It never compacts or writes a file. Text after `/handoff-preview` works like text after `/compact`.
-
-To skip the plugin for one compaction on purpose, run `/compact native`. Any text after `native` goes to Claude Code's compaction as usual. The plugin leaves compactions inside subagents alone.
 
 ## Configuration
 
@@ -48,7 +75,7 @@ To skip the plugin for one compaction on purpose, run `/compact native`. Any tex
 
 ## Develop
 
-To load the plugin from this folder, start a session with it:
+To load the plugin from a clone, start a session with it:
 
 ```sh
 claude --plugin-dir .
@@ -62,13 +89,12 @@ To check it, run:
 pnpm install
 pnpm typecheck
 pnpm lint
-pnpm format
 claude plugin validate .
 claude plugin test .
 ```
 
-To regenerate the changelog from conventional commits, run `git cliff -o CHANGELOG.md`.
+To fix formatting, run `pnpm format`. To regenerate the [changelog](CHANGELOG.md) from conventional commits, run `git cliff -o CHANGELOG.md`. The design decisions are in [docs/adr/](docs/adr/), and the project's terms are in [GLOSSARY.md](GLOSSARY.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)
