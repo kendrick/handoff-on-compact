@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0 (2026-11-08)
+
+### Features
+
+- write the handoff on precompute so the swap is instant
+
 ## v0.1.1 (2026-11-07)
 
 ### Bug Fixes
