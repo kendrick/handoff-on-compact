@@ -142,13 +142,15 @@ type LogEntry =
 
 // Separates events logged in the same second. A module reload resets `seq` to 0, but by then the clock has moved on.
 let seq = 0;
+// Two sessions in one project share log/ and both count `seq` from 0, so each module instance tags its files.
+const instance = Math.random().toString(36).slice(2, 8);
 // Each event gets its own file because $.fs can't append. Rewriting one shared file would race when a precompute and a compaction log at once.
 const record = async ($: EngineInterface, entry: LogEntry) => {
 	try {
 		const now = new Date(await $.clock.now());
 		const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 		await $.fs.write(
-			`${await handoffDir($)}/log/${stamp}-${seq++}-${entry.event}.json`,
+			`${await handoffDir($)}/log/${stamp}-${instance}-${seq++}-${entry.event}.json`,
 			JSON.stringify({ at: now.toISOString(), ...entry }),
 		);
 	} catch {
