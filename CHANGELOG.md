@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0 (2026-11-10)
+
+### Features
+
+- log which path each compaction takes, and why, to `log/` in the handoff folder
+
+### Documentation
+
+- note the compaction log in the README
+
 ## v0.2.0 (2026-11-08)
 
 ### Features
