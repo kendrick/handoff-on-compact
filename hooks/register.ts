@@ -115,6 +115,50 @@ const toastSwap = ($: EngineInterface, path: string) => {
 	);
 };
 
+type Why =
+	| 'precomputed'
+	| 'no-precompute'
+	| 'focus'
+	| 'precompute-not-accepted'
+	| 'handle-missing'
+	| 'tail-over-cap'
+	| Attempt['outcome']
+	| (string & {});
+
+type LogEntry =
+	| { event: 'precompute'; outcome: Attempt['outcome']; reason?: string; ms: number }
+	| {
+			event: 'compact';
+			trigger: string;
+			// Left out when the hook never saw the precompute's outcome, because 'none' would claim no precompute ran.
+			precompute?: Attempt['outcome'] | 'none';
+			coveredFound?: boolean;
+			tail?: number;
+			cap: number;
+			path: 'cached' | 'fresh' | 'core';
+			why: Why;
+			ms?: number;
+	  };
+
+// Separates events logged in the same second. A module reload resets `seq` to 0, but by then the clock has moved on.
+let seq = 0;
+// Two sessions in one project share log/ and both count `seq` from 0, so each module instance tags its files.
+const instance = Math.random().toString(36).slice(2, 8);
+// Each event gets its own file because $.fs can't append. Rewriting one shared file would race when a precompute and a compaction log at once.
+const record = async ($: EngineInterface, entry: LogEntry) => {
+	try {
+		const now = new Date(await $.clock.now());
+		const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+		await $.fs.write(
+			`${await handoffDir($)}/log/${stamp}-${instance}-${seq++}-${entry.event}.json`,
+			JSON.stringify({ at: now.toISOString(), ...entry }),
+		);
+	} catch {
+		// The log exists to explain compactions, so a failed log write must never break one.
+	}
+};
+const since = async ($: EngineInterface, t0: number) => (await $.clock.now()) - t0;
+
 // Toasts and command text carry no plugin name: Claude Code draws both under it already.
 export const register: Register = (on, options) => {
 	const skillOption = typeof options.skill_path === 'string' ? options.skill_path : '';
@@ -155,13 +199,20 @@ export const register: Register = (on, options) => {
 	// engine keeps nothing of its own and the real compaction still comes back through this hook.
 	on('session.compact', { trigger: 'precompute' }, async ($, e) => {
 		if (e.agentId === undefined) {
+			const t0 = await $.clock.now();
 			// Nobody asked for a precompute, so its failures stay quiet and the compaction forks fresh.
 			const pending = attempt($, skillOption).catch((): Attempt => ({
 				outcome: 'fork-failed',
 				reason: 'precompute threw',
 			}));
 			ahead = { pending, coveredHandle: e.messages.at(-1)?.handle };
-			await pending;
+			const done = await pending;
+			await record($, {
+				event: 'precompute',
+				outcome: done.outcome,
+				...('reason' in done ? { reason: done.reason } : {}),
+				ms: await since($, t0),
+			});
 		}
 		return { skip: 'handoff-on-compact writes its own handoff ahead of time' };
 	});
@@ -176,9 +227,21 @@ export const register: Register = (on, options) => {
 			return next(native[1] ? { ...rest, instructions: native[1] } : rest);
 		}
 
+		const t0 = await $.clock.now();
+		const seen: Omit<Extract<LogEntry, { event: 'compact' }>, 'path' | 'why' | 'ms'> = {
+			event: 'compact',
+			trigger: e.trigger,
+			cap: TAIL_CAP,
+		};
+		const log = async (path: 'cached' | 'fresh' | 'core', why: Why) =>
+			record($, { ...seen, path, why, ms: await since($, t0) });
+
 		const cached = ahead;
 		ahead = undefined;
+		if (cached === undefined) seen.precompute = 'none';
+		let why: Why = 'no-precompute';
 		// The stored document was written without focus text, so a focused /compact needs its own fork.
+		if (cached !== undefined && e.instructions !== undefined) why = 'focus';
 		if (cached !== undefined && e.instructions === undefined) {
 			const early = await cached.pending;
 			const { coveredHandle } = cached;
@@ -186,9 +249,21 @@ export const register: Register = (on, options) => {
 				coveredHandle === undefined ? -1 : e.messages.findIndex((m) => m.handle === coveredHandle);
 			// Messages after the precompute ride along verbatim, so nothing said since is summarized away.
 			const tail = at === -1 ? undefined : e.messages.slice(at + 1);
+			seen.precompute = early.outcome;
+			seen.coveredFound = at !== -1;
+			if (tail !== undefined) seen.tail = size(tail);
+			why =
+				early.outcome !== 'accepted'
+					? 'precompute-not-accepted'
+					: tail === undefined
+						? 'handle-missing'
+						: size(tail) > TAIL_CAP
+							? 'tail-over-cap'
+							: 'precomputed';
 			if (early.outcome === 'accepted' && tail !== undefined && size(tail) <= TAIL_CAP) {
 				await $.fs.write(early.path, early.text);
 				toastSwap($, early.path);
+				await log('cached', why);
 				return {
 					messages: [{ role: 'user', text: `${early.text}\n\n${AFTER}`, toolUses: [] }, ...tail],
 				};
@@ -199,22 +274,34 @@ export const register: Register = (on, options) => {
 		switch (result.outcome) {
 			case 'no-skill':
 				$.ui.toast(`No handoff skill at ${result.skillPath}, so core compacted`);
+				await log('core', result.outcome);
 				return next(e);
 			case 'fork-failed':
 				$.ui.toast(`Fork failed (${result.reason}), so core compacted`);
+				await log('core', result.outcome);
 				return next(e);
 			case 'rejected':
 				await $.fs.write(result.path, result.text);
 				$.ui.toast(
 					`${result.reason.charAt(0).toUpperCase()}${result.reason.slice(1)}, so core compacted · reply kept at ${result.path}`,
 				);
+				await log('core', result.outcome);
 				return next(e);
 		}
 		await $.fs.write(result.path, result.text);
 		toastSwap($, result.path);
+		await log('fresh', why);
 		return { messages: [{ role: 'user', text: result.text, toolUses: [] }] };
-	}).catch(($, e, next) => {
-		$.ui.toast(`${next.error.message ?? next.error.kind}, so core compacted`);
+	}).catch(async ($, e, next) => {
+		const message = next.error.message ?? next.error.kind;
+		await record($, {
+			event: 'compact',
+			trigger: e.trigger,
+			cap: TAIL_CAP,
+			path: 'core',
+			why: message,
+		});
+		$.ui.toast(`${message}, so core compacted`);
 		return next(e);
 	});
 };

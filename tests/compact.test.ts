@@ -24,11 +24,25 @@ type Engine = {
 	reply?: string;
 	failure?: 'nothing-to-fork' | 'empty-reply' | 'aborted';
 	writeFails?: boolean;
+	// Deny only the log's writes, or only everything else's.
+	logWriteFails?: boolean;
+	docWriteFails?: boolean;
 	// Holds every fork until it resolves, to stand for one still running.
 	gate?: Promise<void>;
 	// The first fork is refused outright, as an engine error would be.
 	firstForkThrows?: boolean;
 };
+
+// Any handoff folder's log, wherever TMPDIR and the separator put it.
+const isLog = (p: string) => /[\\/]log[\\/][^\\/]+\.json$/.test(p);
+// Handoff documents only, so older assertions stay about what they were written for.
+const docs = (w: Record<string, string>) =>
+	Object.fromEntries(Object.entries(w).filter(([p]) => !isLog(p)));
+const logged = (w: Record<string, string>) =>
+	Object.entries(w)
+		.filter(([p]) => isLog(p))
+		.toSorted(([a], [b]) => a.localeCompare(b))
+		.map(([, t]) => JSON.parse(t) as Record<string, unknown>);
 
 // The test host is POSIX, so the engine resolves a drive path against the working directory; undo that.
 const unresolve = (path: string) => path.replace(/^.*(?=[A-Z]:\\)/, '');
@@ -44,6 +58,8 @@ const engine = (
 		reply = DOC,
 		failure,
 		writeFails = false,
+		logWriteFails = false,
+		docWriteFails = false,
 		gate,
 		firstForkThrows = false,
 	}: Engine = {},
@@ -79,7 +95,8 @@ const engine = (
 		return { value: text };
 	});
 	on('fs.write', (_, e) => {
-		if (writeFails) return { deny: `EACCES: ${e.path}` };
+		if (writeFails || (isLog(unresolve(e.path)) ? logWriteFails : docWriteFails))
+			return { deny: `EACCES: ${e.path}` };
 		seen.writes[unresolve(e.path)] = e.text;
 		return { value: undefined };
 	});
@@ -129,7 +146,7 @@ test('the document is saved where the handoff skill keeps its own, named from it
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(seen.writes).toEqual({
+	expect(docs(seen.writes)).toEqual({
 		'/tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md': DOC,
 	});
 });
@@ -142,7 +159,7 @@ test('a reply without the heading falls back to core, and is kept beside the han
 
 	const kept = '/tmp/x/agent-handoff/handoff-on-compact/rejected/2026-11-06-1405.md';
 	expect(result).toEqual(CORE);
-	expect(seen.writes).toEqual({ [kept]: reply });
+	expect(docs(seen.writes)).toEqual({ [kept]: reply });
 	expect(seen.toasts).toEqual([
 		`No \`# Handoff:\` heading, so core compacted · reply kept at ${kept}`,
 	]);
@@ -175,7 +192,7 @@ test('a taken filename gets the seconds appended, as the handoff skill does, so 
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(Object.keys(seen.writes)).toEqual([
+	expect(Object.keys(docs(seen.writes))).toEqual([
 		'/tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork-37.md',
 	]);
 });
@@ -189,7 +206,7 @@ test("from a subdirectory with no TMPDIR, the folder uses TEMP and the git root'
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(Object.keys(seen.writes)).toEqual([
+	expect(Object.keys(docs(seen.writes))).toEqual([
 		'/win/temp/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md',
 	]);
 });
@@ -215,7 +232,7 @@ test("the filename's time comes from the clock, since a fork can't read one and 
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(Object.keys(seen.writes)).toEqual([
+	expect(Object.keys(docs(seen.writes))).toEqual([
 		'/tmp/x/agent-handoff/handoff-on-compact/2026-11-06-1405-probe-fork.md',
 	]);
 });
@@ -239,7 +256,7 @@ test('when the seconds-suffixed name is taken too, a counter follows, so no hand
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(Object.keys(seen.writes)).toEqual([`${dir}/2026-11-06-1405-probe-fork-37-2.md`]);
+	expect(Object.keys(docs(seen.writes))).toEqual([`${dir}/2026-11-06-1405-probe-fork-37-2.md`]);
 });
 
 test('on Windows, the skill comes from USERPROFILE and the folder from the git root found across backslashes', async ($, on) => {
@@ -252,7 +269,7 @@ test('on Windows, the skill comes from USERPROFILE and the folder from the git r
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(seen.toasts.filter((t) => t.includes('core compacted'))).toEqual([]);
-	expect(Object.keys(seen.writes)).toEqual([
+	expect(Object.keys(docs(seen.writes))).toEqual([
 		'C:\\Temp/agent-handoff/my-repo/2026-11-06-1405-probe-fork.md',
 	]);
 });
@@ -299,7 +316,7 @@ test("a document that still carries the skill's pointer block is rejected, not s
 
 	const kept = '/tmp/x/agent-handoff/handoff-on-compact/rejected/2026-11-06-1405.md';
 	expect(result).toEqual(CORE);
-	expect(seen.writes).toEqual({ [kept]: reply });
+	expect(docs(seen.writes)).toEqual({ [kept]: reply });
 	expect(seen.toasts).toEqual([
 		`Reply carries the skill's pointer block, so core compacted · reply kept at ${kept}`,
 	]);
@@ -336,7 +353,7 @@ test('a second rejected reply in the same minute gets its own file, so neither i
 
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
-	expect(Object.keys(seen.writes)).toEqual([`${dir}/2026-11-06-1405-37.md`]);
+	expect(Object.keys(docs(seen.writes))).toEqual([`${dir}/2026-11-06-1405-37.md`]);
 });
 
 test('the swap toast stays long enough to read its path and id, since the default 4 s does not', async ($, on) => {
@@ -422,7 +439,7 @@ test('a failed precompute stays quiet, and the compaction forks fresh', async ($
 	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
 
 	expect(seen.toasts).toEqual([]);
-	expect(seen.writes).toEqual({});
+	expect(docs(seen.writes)).toEqual({});
 
 	await $.session.compact({ trigger: 'manual', messages: [said('hi', 'h1')] });
 
@@ -474,4 +491,163 @@ test('a precompute over messages with no handle is never matched, so the compact
 	await $.session.compact({ trigger: 'manual', messages: CHAT });
 
 	expect(seen.forks).toHaveLength(2);
+});
+
+const AFTER_NOTE = 'The messages that follow are newer than it.';
+
+test('a compaction with no precompute logs a fresh fork', async ($, on) => {
+	const seen = engine(on);
+
+	await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(logged(seen.writes)).toMatchObject([
+		{
+			event: 'compact',
+			trigger: 'manual',
+			precompute: 'none',
+			path: 'fresh',
+			why: 'no-precompute',
+			cap: 60_000,
+		},
+	]);
+});
+
+test('a precomputed swap logs cached, with the precompute logged first', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	await $.session.compact({ trigger: 'manual', messages: [...before, said('more', 'h2')] });
+
+	const [early, swap] = logged(seen.writes);
+	expect(early).toMatchObject({ event: 'precompute', outcome: 'accepted' });
+	expect(swap).toMatchObject({
+		event: 'compact',
+		precompute: 'accepted',
+		coveredFound: true,
+		path: 'cached',
+		why: 'precomputed',
+	});
+	expect(swap?.['tail']).toBeGreaterThan(0);
+});
+
+// The rule from #2: the log says cached exactly when the swap carries the AFTER note. This test and the next two
+// each move one input and check the log against the result it describes.
+test('a tail over the cap logs a fresh fork, and the swap carries no AFTER note', async ($, on) => {
+	const seen = engine(on);
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	const result = await $.session.compact({
+		trigger: 'manual',
+		messages: [said('hi', 'h1'), said('x'.repeat(60_001), 'h2', 'assistant')],
+	});
+
+	expect(result.messages?.[0]?.text.endsWith(AFTER_NOTE)).toBe(false);
+	expect(logged(seen.writes).at(-1)).toMatchObject({ path: 'fresh', why: 'tail-over-cap' });
+});
+
+test('a large precomputed document with a small tail still swaps in cached', async ($, on) => {
+	const seen = engine(on, { reply: DOC + 'x'.repeat(70_000) });
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	const result = await $.session.compact({ trigger: 'manual', messages: [said('hi', 'h1')] });
+
+	expect(result.messages?.[0]?.text.endsWith(AFTER_NOTE)).toBe(true);
+	expect(logged(seen.writes).at(-1)).toMatchObject({ path: 'cached', why: 'precomputed' });
+});
+
+test('a precompute whose last message is gone logs handle-missing', async ($, on) => {
+	const seen = engine(on);
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	const result = await $.session.compact({
+		trigger: 'manual',
+		messages: [said('a new start', 'h9')],
+	});
+
+	expect(result.messages?.[0]?.text.endsWith(AFTER_NOTE)).toBe(false);
+	expect(logged(seen.writes).at(-1)).toMatchObject({
+		coveredFound: false,
+		why: 'handle-missing',
+		path: 'fresh',
+	});
+});
+
+test('a focused /compact logs why it skipped the precompute', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+
+	await $.session.compact({
+		trigger: 'manual',
+		instructions: 'keep the API notes',
+		messages: before,
+	});
+
+	expect(logged(seen.writes).at(-1)).toMatchObject({ why: 'focus', path: 'fresh' });
+	expect(logged(seen.writes).at(-1)?.['precompute']).toBeUndefined();
+});
+
+test('a rejected precompute logs its outcome, and the compaction says why it fell back', async ($, on) => {
+	const seen = engine(on, { reply: 'no heading here' });
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	await $.session.compact({ trigger: 'manual', messages: [said('hi', 'h1')] });
+
+	expect(logged(seen.writes)).toMatchObject([
+		{ event: 'precompute', outcome: 'rejected' },
+		{ event: 'compact', precompute: 'rejected', path: 'core', why: 'rejected' },
+	]);
+});
+
+test('a precompute that throws logs fork-failed', async ($, on) => {
+	const seen = engine(on, { firstForkThrows: true });
+
+	await $.session.compact({ trigger: 'precompute', messages: [said('hi', 'h1')] });
+
+	expect(logged(seen.writes)).toMatchObject([
+		{ event: 'precompute', outcome: 'fork-failed', reason: 'precompute threw' },
+	]);
+});
+
+test('two compactions in one second keep separate log files', async ($, on) => {
+	const seen = engine(on);
+	const before = [said('hi', 'h1')];
+	await $.session.compact({ trigger: 'precompute', messages: before });
+	await $.session.compact({ trigger: 'manual', messages: before });
+
+	await $.session.compact({ trigger: 'manual', messages: before });
+
+	expect(logged(seen.writes)).toHaveLength(3);
+});
+
+test('a log write that fails changes nothing about the compaction', async ($, on) => {
+	const seen = engine(on, { logWriteFails: true });
+
+	const result = await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(result.messages?.map((m) => m.text)).toEqual([DOC]);
+	expect(seen.toasts).toHaveLength(1);
+	expect(seen.toasts[0]).toMatch(/^Swapped in the handoff/);
+});
+
+test('an error in the hook still logs, as core', async ($, on) => {
+	const seen = engine(on, { docWriteFails: true });
+
+	const result = await $.session.compact({ trigger: 'manual', messages: CHAT });
+
+	expect(result).toEqual(CORE);
+	const lines = logged(seen.writes);
+	expect(lines).toMatchObject([{ event: 'compact', path: 'core' }]);
+	expect(String(lines[0]?.['why'])).toMatch(/EACCES/);
+	expect(lines[0]?.['precompute']).toBeUndefined();
+});
+
+test('subagent and native compactions write no log', async ($, on) => {
+	const seen = engine(on);
+
+	await $.session.compact({ trigger: 'auto', agentId: 'a1', messages: CHAT });
+	await $.session.compact({ trigger: 'manual', instructions: 'native', messages: CHAT });
+
+	expect(logged(seen.writes)).toEqual([]);
 });

@@ -69,6 +69,8 @@ Claude Code can prepare a compaction ahead of time. When it does, the plugin wri
 
 If the plugin can't produce a document, Claude Code's own compaction runs instead, and a toast says why: the skill wasn't found, the fork failed, the reply broke the skill's contract, or the plugin hit an error. A reply that broke the contract is kept in `rejected/` inside the handoff folder, so you can see what the fork wrote.
 
+The plugin also writes a JSON file to `log/` inside the handoff folder for each compaction it handles, and for each one Claude Code prepares ahead of time. A compaction's file names the path it took (`cached` for the document written ahead of time, `fresh` for a new fork, `core` for Claude Code's own compaction), the reason, and how long it ran.
+
 ## Configuration
 
 | Option | Default | Meaning |
