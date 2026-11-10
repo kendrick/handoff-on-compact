@@ -130,7 +130,8 @@ type LogEntry =
 	| {
 			event: 'compact';
 			trigger: string;
-			precompute: Attempt['outcome'] | 'none';
+			// Left out when the hook never saw the precompute's outcome, because 'none' would claim no precompute ran.
+			precompute?: Attempt['outcome'] | 'none';
 			coveredFound?: boolean;
 			tail?: number;
 			cap: number;
@@ -228,7 +229,6 @@ export const register: Register = (on, options) => {
 		const seen: Omit<Extract<LogEntry, { event: 'compact' }>, 'path' | 'why' | 'ms'> = {
 			event: 'compact',
 			trigger: e.trigger,
-			precompute: 'none',
 			cap: TAIL_CAP,
 		};
 		const log = async (path: 'cached' | 'fresh' | 'core', why: Why) =>
@@ -236,6 +236,7 @@ export const register: Register = (on, options) => {
 
 		const cached = ahead;
 		ahead = undefined;
+		if (cached === undefined) seen.precompute = 'none';
 		let why: Why = 'no-precompute';
 		// The stored document was written without focus text, so a focused /compact needs its own fork.
 		if (cached !== undefined && e.instructions !== undefined) why = 'focus';
@@ -294,7 +295,6 @@ export const register: Register = (on, options) => {
 		await record($, {
 			event: 'compact',
 			trigger: e.trigger,
-			precompute: 'none',
 			cap: TAIL_CAP,
 			path: 'core',
 			why: message,

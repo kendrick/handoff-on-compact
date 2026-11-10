@@ -585,6 +585,7 @@ test('a focused /compact logs why it skipped the precompute', async ($, on) => {
 	});
 
 	expect(logged(seen.writes).at(-1)).toMatchObject({ why: 'focus', path: 'fresh' });
+	expect(logged(seen.writes).at(-1)?.['precompute']).toBeUndefined();
 });
 
 test('a rejected precompute logs its outcome, and the compaction says why it fell back', async ($, on) => {
@@ -639,6 +640,7 @@ test('an error in the hook still logs, as core', async ($, on) => {
 	const lines = logged(seen.writes);
 	expect(lines).toMatchObject([{ event: 'compact', path: 'core' }]);
 	expect(String(lines[0]?.['why'])).toMatch(/EACCES/);
+	expect(lines[0]?.['precompute']).toBeUndefined();
 });
 
 test('subagent and native compactions write no log', async ($, on) => {
