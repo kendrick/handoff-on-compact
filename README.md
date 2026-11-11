@@ -41,13 +41,13 @@ npx skills add kendrick/skills --skill handoff
 Then install the plugin from the prompt of a Claude Code session:
 
 ```text
-/plugin install handoff-on-compact --marketplace kendrick/handoff-on-compact
+/plugin install handoff-on-compact --marketplace kendrick/agent-plugins
 ```
 
 Or from a shell:
 
 ```sh
-claude plugin install handoff-on-compact --marketplace kendrick/handoff-on-compact
+claude plugin install handoff-on-compact --marketplace kendrick/agent-plugins
 ```
 
 ## Usage
