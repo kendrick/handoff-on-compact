@@ -1,6 +1,0 @@
-{
-	"name": "handoff-on-compact",
-	"description": "The handoff-on-compact plugin for Claude Code.",
-	"owner": { "name": "Kendrick Arnett" },
-	"plugins": [{ "name": "handoff-on-compact", "source": "./" }]
-}
