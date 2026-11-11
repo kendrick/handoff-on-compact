@@ -63,7 +63,7 @@ Compact the way you already do: both `/compact` and Claude Code's automatic comp
 
 The plugin saves each document to `$TMPDIR/agent-handoff/<project>/<YYYY-MM-DD-HHMM>-<slug>.md`, the folder and name the skill uses. `<project>` is the name of your repo's root folder. Compactions inside subagents go to Claude Code's own compaction untouched.
 
-Claude Code can prepare a compaction ahead of time. When it does, the plugin writes the handoff document then, so the swap itself is instant. Anything said after that point follows the document word for word, under a note saying it's newer. The plugin forks fresh instead when the conversation has changed underneath (a `/clear` or a rewind), when what was said since is too long to carry over, or when `/compact` has focus text.
+Claude Code can also prepare a compaction ahead of time. When it does, the plugin writes the handoff document then, so the swap itself is instant. None of the compactions we've logged has been prepared ahead of time yet ([#4](https://github.com/kendrick/handoff-on-compact/issues/4)). Until one is, expect each compaction to wait while the plugin forks a fresh document. When the plugin did write a document ahead of time, anything said after that point follows it word for word, under a note saying it's newer. The plugin forks fresh instead when the conversation has changed underneath (a `/clear` or a rewind), when what was said since is too long to carry over, or when `/compact` has focus text.
 
 ### When It Falls Back
 
